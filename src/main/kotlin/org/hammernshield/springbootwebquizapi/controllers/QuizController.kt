@@ -2,8 +2,10 @@ package org.hammernshield.springbootwebquizapi.controllers
 
 import jakarta.validation.Valid
 import org.hammernshield.springbootwebquizapi.model.AnswerDTO
+import org.hammernshield.springbootwebquizapi.model.QuizDTO
 import org.hammernshield.springbootwebquizapi.model.QuizModel
 import org.hammernshield.springbootwebquizapi.model.QuizDTOWithoutAnswer
+import org.hammernshield.springbootwebquizapi.services.QuizService
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
@@ -17,7 +19,9 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @Validated
 @RequestMapping("api/quizzes")
-class QuizController {
+class QuizController(
+    val quizService: QuizService
+) {
 
     private val quizList = mutableListOf<QuizModel>()
 
@@ -81,7 +85,7 @@ class QuizController {
         if (quizExists) {
             val quiz = quizList.find { it.id == id }
             val answerList = quiz?.answer ?: listOf()
-            val answerCorrect = answerList.containsAll(answers.answer)
+            val answerCorrect = quizService.areAnswersCorrect(answers.answer, answerList)
 
             when (answerCorrect) {
                 true -> {
@@ -106,7 +110,7 @@ class QuizController {
 
     @PostMapping
     fun addQuiz(
-        @RequestBody @Valid quiz: QuizModel
+        @RequestBody @Valid quiz: QuizDTO
     ) : ResponseEntity<QuizModel> {
         val currentIndex = quizList.size + 1
         val quizToAdd = QuizModel(
