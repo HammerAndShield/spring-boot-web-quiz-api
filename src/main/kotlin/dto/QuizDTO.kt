@@ -1,4 +1,4 @@
-package org.hammernshield.springbootwebquizapi.model
+package dto
 
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -14,5 +14,5 @@ data class QuizDTO(
     @field:Size(min = 2)
     val options: List<String>,
 
-    val answer: List<Int>
+    val answer: List<Int>?
 )

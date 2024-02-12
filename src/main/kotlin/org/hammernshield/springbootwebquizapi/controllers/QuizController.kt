@@ -1,11 +1,12 @@
 package org.hammernshield.springbootwebquizapi.controllers
 
 import jakarta.validation.Valid
-import org.hammernshield.springbootwebquizapi.model.AnswerDTO
-import org.hammernshield.springbootwebquizapi.model.QuizDTO
+import dto.AnswerDTO
+import dto.QuizDTO
 import org.hammernshield.springbootwebquizapi.model.QuizModel
-import org.hammernshield.springbootwebquizapi.model.QuizDTOWithoutAnswer
+import dto.QuizDTOWithoutAnswer
 import org.hammernshield.springbootwebquizapi.services.QuizService
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
@@ -20,34 +21,16 @@ import org.springframework.web.bind.annotation.RestController
 @Validated
 @RequestMapping("api/quizzes")
 class QuizController(
-    val quizService: QuizService
+    @Autowired private val quizService: QuizService,
 ) {
-
-    private val quizList = mutableListOf<QuizModel>()
-
-    private fun createQuiz() : QuizModel {
-        val title = "Zelda Cell Shade"
-        val text = "What Zelda video game used a cell shaded art style?"
-        val options = listOf("Twilight Princess", "Ocarina of Time", "Wind Waker", "Breath of the Wild")
-
-        return QuizModel(
-            1,
-            title,
-            text,
-            options,
-            listOf(2)
-        )
-    }
-
-    init {
-        quizList.add(createQuiz())
-    }
 
     @GetMapping
     fun getAllQuiz() : ResponseEntity<Any> {
+        val quizList = quizService.getAllQuizzes()
+
         val response = quizList.map {quiz ->
             QuizDTOWithoutAnswer(
-                id = quiz.id,
+                id = quiz.id ?: 0,
                 title = quiz.title,
                 text = quiz.text,
                 options = quiz.options
@@ -58,53 +41,38 @@ class QuizController(
     }
 
     @GetMapping("{quizId}")
-    fun getQuiz(@PathVariable quizId: Int): ResponseEntity<Any> {
-        val quizExists = quizList.indices.contains(quizId - 1)
+    fun getQuiz(@PathVariable quizId: Long): ResponseEntity<Map<String, Any?>>? {
+        val optionalQuiz = quizService.getQuizById(quizId)
 
-        if (quizExists) {
-            val quiz = quizList.find { it.id == quizId }
-            val response = mutableMapOf(
-                "id" to quiz?.id,
-                "title" to quiz?.title,
-                "text" to quiz?.text,
-                "options" to quiz?.options
-            )
-            return ResponseEntity(response, HttpStatus.OK)
-        } else {
-            return ResponseEntity(HttpStatus.NOT_FOUND)
+        return optionalQuiz.map { quiz ->
+            ResponseEntity.ok(mapOf(
+                "id" to quiz.id,
+                "title" to quiz.title,
+                "text" to quiz.text,
+                "options" to quiz.options
+            ))
+        }.orElseGet {
+            ResponseEntity(HttpStatus.NOT_FOUND)
         }
     }
 
     @PostMapping("{id}/solve")
     fun solveQuiz(
-        @PathVariable id: Int,
-        @RequestBody @Valid answers: AnswerDTO
-    ) : ResponseEntity<Any> {
-        val quizExists = quizList.indices.contains(id - 1)
+        @PathVariable id: Long,
+        @RequestBody answers: AnswerDTO
+    ): ResponseEntity<Map<String, Any>> { // No need for nullable return type
+        val optionalQuiz = quizService.getQuizById(id)
 
-        if (quizExists) {
-            val quiz = quizList.find { it.id == id }
-            val answerList = quiz?.answer ?: listOf()
-            val answerCorrect = quizService.areAnswersCorrect(answers.answer, answerList)
-
-            when (answerCorrect) {
-                true -> {
-                    val response = mutableMapOf(
-                        "success" to true,
-                        "feedback" to "Congratulations, you're right!"
-                    )
-                    return ResponseEntity(response, HttpStatus.OK)
-                }
-                false -> {
-                    val response = mutableMapOf(
-                        "success" to false,
-                        "feedback" to "Wrong answer! Please, try again."
-                    )
-                    return ResponseEntity(response, HttpStatus.OK)
-                }
+        return optionalQuiz.map { quiz ->
+            val isCorrect = quizService.areAnswersCorrect(answers.answer, quiz.answer)
+            val response: Map<String, Any> = if (isCorrect) {
+                mapOf("success" to true, "feedback" to "Congratulations, you're right!")
+            } else {
+                mapOf("success" to false, "feedback" to "Wrong answer! Please, try again.")
             }
-        } else {
-            return ResponseEntity(HttpStatus.NOT_FOUND)
+            ResponseEntity.ok(response)
+        }.orElseGet {
+            ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to "Quiz not found"))
         }
     }
 
@@ -112,15 +80,13 @@ class QuizController(
     fun addQuiz(
         @RequestBody @Valid quiz: QuizDTO
     ) : ResponseEntity<QuizModel> {
-        val currentIndex = quizList.size + 1
         val quizToAdd = QuizModel(
-            currentIndex,
-            quiz.title,
-            quiz.text,
-            quiz.options,
-            quiz.answer
+            title = quiz.title,
+            text = quiz.text,
+            options = quiz.options,
+            answer = quiz.answer ?: listOf()
         )
-        quizList.add(quizToAdd)
+        quizService.addQuiz(quizToAdd)
 
         return ResponseEntity(quizToAdd, HttpStatus.OK)
     }
